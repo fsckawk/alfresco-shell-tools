@@ -4,7 +4,7 @@
 
 # source function library
 # updated to work with Alfresco 5.1
-# spd, Wed May 10 14:40:10 CEST 2017
+# spd, Thu Mar 20 13:41:29 CET 2025
 
 # Require Alfresco admin credentials, won't work with local site admin
 
@@ -60,8 +60,10 @@ __encode_url_param $ALF_STORE
 ENC_STORE=$ENCODED_PARAM
 
 curl $ALF_CURL_OPTS -u $ALF_UID:$ALF_PW "$ALF_PATH/$PROTOCOL/$STORE/$UUID"  |\
-$ALF_JSHON -Q -e results -e 0 -e qnamePath -e prefixedName -u
+$ALF_JSHON -Q -e qnamePath -e prefixedName -u |\
+sed -e 's,.*st:sites/cm:,,' -e 's,/cm:,:,' -e 's/cm://g'
 
+#$ALF_JSHON -Q -e results -e 0 -e qnamePath -e prefixedName -u
 
 
 

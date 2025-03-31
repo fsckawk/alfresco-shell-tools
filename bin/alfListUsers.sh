@@ -1,6 +1,13 @@
 #!/bin/bash
 # set -x
+
+#
+# Mon Mar 31 13:12:21 CEST 2025
+# Changed to use the new API version which supports "skipCount"
+# Necessary when there is more than 5000 users
 # param section
+
+#
 
 # source function library
 
@@ -57,20 +64,55 @@ then
 fi
 
 
-curl $ALF_CURL_OPTS -u $ALF_UID:$ALF_PW "$ALF_EP/service/api/people" |(
-if $ALF_JSON_OUTPUT
-then
-	cat
-else
-  if $ALF_PW_OUTPUT
-  then
-  	$ALF_JSHON -Q -e people -a -e userName -u \
-	-p -e firstName -u -p -e lastName
-  else
-  	$ALF_JSHON -Q -e people -a -e userName -u 
-  fi
-fi
-) | (
+
+# API=service/api/people
+#  	$ALF_JSHON -Q -e people -a -e userName -u \
+#	-p -e firstName -u -p -e lastName
+
+API=api/-default-/public/alfresco/versions/1/people
+
+NOTDONE=:
+
+(
+MAXITEMS=1000
+SKIP=0
+while $NOTDONE
+do
+	OUTPUT=`curl $ALF_CURL_OPTS -u $ALF_UID:$ALF_PW \
+	"$ALF_EP/${API}?maxItems=${MAXITEMS}&skipCount=${SKIP}"`
+
+	MORE=`echo ${OUTPUT} |\
+		jshon -Q -e list -e pagination -e hasMoreItems`
+	
+
+	echo "${OUTPUT}" |\
+	(
+	if $ALF_JSON_OUTPUT
+	then
+		cat
+	else
+	  if $ALF_PW_OUTPUT
+	  then
+		$ALF_JSHON \
+		-Q -e list -e entries \
+		-a -e entry \
+		-e id -u -p -e firstName -u -p -e lastName -u
+	  else
+		$ALF_JSHON \
+		-Q -e list -e entries \
+		-a -e entry \
+		-e id -u 
+	  fi
+	fi
+	)
+	SKIP=`expr $SKIP + $MAXITEMS`
+
+	if [ "_$MORE" = "_false" ]
+	then
+		NOTDONE=false
+	fi
+done
+) | sort | (
 
 if $ALF_PW_OUTPUT
 then
@@ -85,3 +127,4 @@ else
 fi
 
 )
+
