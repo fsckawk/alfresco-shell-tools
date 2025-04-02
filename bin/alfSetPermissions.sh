@@ -10,6 +10,9 @@
 # also won't replace or delete existing ones.
 # TODO: add options to edit/delete permissions.
 
+# Mon Mar 31 14:50:42 CEST 2025
+# slingshot/doclib/permissions fails when there are more than 5k users
+
 # Requires alfToolsLib.sh
 # Requires jshon
 
@@ -96,11 +99,6 @@ ALF_SERVER=`echo "$ALF_SHARE_EP" | sed -e 's,/share,,'`
 
 if [ "_$ALF_SITE_SHORT_NAME" != "_" ]
 then
-	#
-	# I got random failures using alfresco/service/slingshot/search API
-	# so we'll use CMIS API here
-	#
-	#ALF_NODE_ID=`alfPath2NodeRef.sh "/app:company_home/st:sites/cm:${ALF_SITE_SHORT_NAME}/cm:documentLibrary/cm:${ALF_FILE_NAME}" | sed -e 's,://,/,'`
 
 	URL=$ALF_SERVER/alfresco/api/-default-/public/cmis/versions
 	URL=${URL}/1.1/browser/root/Sites/${ALF_SITE_SHORT_NAME}
@@ -116,7 +114,7 @@ then
 		echo "#### ERROR: Non-existing path" >&2
 		exit 2
 	fi
-	ALF_NODE_ID="workspace/SpacesStore/${ALF_NODE_ID}"
+	ALF_NODE_ID="${ALF_NODE_ID}"
 
 else
 	ALF_NODE_ID="workspace/SpacesStore/${ALF_NODE_ID}"
@@ -127,43 +125,78 @@ then
   echo "  node id: $ALF_NODE_ID" >&2
 fi
 
-ALF_PATH="alfresco/s/slingshot/doclib/permissions/${ALF_NODE_ID}"
+API="api/-default-/public/alfresco/versions/1/nodes/${ALF_NODE_ID}"
 
+CURRENTPERMS=`curl $ALF_CURL_OPTS \
+-u"$ALFTOOLS_USER:$ALFTOOLS_PASSWORD" \
+-H 'accept:application/json' \
+-X GET \
+$ALF_EP/${API}?include=permissions`
 
+inherited=`echo "$CURRENTPERMS" |\
+$ALF_JSHON -e entry \
+-e permissions \
+-e isInheritanceEnabled`
 
+if [ "_$inherited" = "_true" ]
+then
+	#
+	# disable inherited permissions
+	#
+	NEWPERMS=`echo "$CURRENTPERMS" |\
+	$ALF_JSHON -e entry \
+	-e permissions \
+	-d inherited \
+	-d isInheritanceEnabled \
+	-n false -i isInheritanceEnabled \
+	-n "[]" -i locallySet`
+	echo "$NEWPERMS"
+else
+	NEWPERMS=`echo "$CURRENTPERMS" |\
+	$ALF_JSHON -e entry \
+	-e permissions`
+fi
 
-ALF_JSON=`echo '{}' | $ALF_JSHON -n false -i isInherited -n '[]' -i permissions`
+ALF_JSON="$NEWPERMS"
+
+if $ALF_VERBOSE
+then
+	echo "$ALF_JSON"
+fi
 
 for arg in $@
 do
 	user=`echo $arg | sed -e 's/:.*//'`
 	role=`echo $arg | sed -e 's/.*://'`
 
-ALF_JSON=`echo "$ALF_JSON" |\
-	$ALF_JSHON -e permissions \
-	-n "{}" \
-	-s "$user" -i "authority" \
-	-s "$role" -i "role" \
-	-n "true" -i "remove" \
-	-i append -p |\
-	$ALF_JSHON -e permissions \
-	-n "{}" \
-	-s "$user" -i "authority" \
-	-s "$role" -i "role" \
-	-i append -p`
+	if echo "$ALF_JSON" | fgrep '"authorityId": "'"${user}"'"' > /dev/null
+	then
+		if $ALF_VERBOSE
+		then
+			echo "# ${user} already present"
+		fi
+		:
+	else
+		ALF_JSON=`echo "$ALF_JSON" |\
+		$ALF_JSHON \
+		-e locallySet \
+		-n "{}" \
+		-s "$user" -i "authorityId" \
+		-s "SiteConsumer" -i "name" \
+		-s "ALLOWED" -i "accessStatus" -i append -p`
+	fi
 done
 
+ALF_JSON='{ "permissions": '"${ALF_JSON}"'}'
 
-echo "$ALF_JSON" |\
+
 curl $ALF_CURL_OPTS \
 -u"$ALFTOOLS_USER:$ALFTOOLS_PASSWORD" \
 -H 'Content-Type:application/json' \
--d@- -X POST \
-$ALF_SERVER/$ALF_PATH 2>&1
-
+-X PUT \
+$ALF_EP/${API}?fields=permissions \
+-d "$ALF_JSON"
 
 # on success the server returns json describing permissions
-
-
 exit $?
 
