@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Tue May 23 13:12:49 CEST 2017
+# Fri Sep  5 12:41:14 CEST 2025
 # spd@daphne.cps.unizar.es
 
 # Script to get permissions for a workspace/SpacesStore node
@@ -138,6 +138,11 @@ then
 	ALF_NODE_ID=`curl $ALF_CURL_OPTS \
 	-u"$ALFTOOLS_USER:$ALFTOOLS_PASSWORD" \
 	"${URL}" | $ALF_JSHON -e properties -e cmis:objectId -e value -u`
+	if [ "_${ALF_NODE_ID}" = "_" ]
+	then
+		echo "## ERROR: \"$ALF_FILE_NAME\" not found" >&2 ; exit
+		exit 1
+	fi
 	ALF_NODE_ID="workspace/SpacesStore/${ALF_NODE_ID}"
 
 else
@@ -149,6 +154,7 @@ then
 	echo "    node id:         $ALF_NODE_ID" >&2
 fi
 
+
 ALF_PATH="alfresco/s/slingshot/doclib/permissions/${ALF_NODE_ID}"
 
 
@@ -157,11 +163,14 @@ OUTPUT=`curl $ALF_CURL_OPTS \
 -u"$ALFTOOLS_USER:$ALFTOOLS_PASSWORD" \
 $ALF_SERVER/$ALF_PATH`
 
-filter "$OUTPUT"
-
-
-# on success the server returns json describing permissions
-
+if [ 0 -eq $? ]
+then
+	# on success the server returns json describing permissions
+	filter "$OUTPUT"
+else
+	echo "## ERROR: $ALF_SERVER/$ALF_PATH" >&2 ; exit
+	exit 1
+fi
 
 exit $?
 
